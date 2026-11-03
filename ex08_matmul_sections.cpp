@@ -1,14 +1,15 @@
 // Ex 8 - Multiplicação de matrizes: cada section calcula uma faixa de linhas de C,
 // e dentro dela um omp for divide essas linhas entre um time interno de threads
-#include <stdio.h>
+#include <iostream>
+#include <vector>
 #include <omp.h>
 
-#define N 512
-#define THREADS_POR_SECAO 2
+constexpr int N = 512;
+constexpr int THREADS_POR_SECAO = 2;
 
-static double A[N][N], B[N][N], C[N][N], Cs[N][N];
+using Matriz = std::vector<std::vector<double>>;
 
-static void multiplicar_linhas(int ini, int fim) {
+static void multiplicar_linhas(const Matriz &A, const Matriz &B, Matriz &C, int ini, int fim) {
     int externa = omp_get_thread_num();
 
     // omp for direto dentro de uma section é aninhamento proibido de worksharing;
@@ -16,8 +17,12 @@ static void multiplicar_linhas(int ini, int fim) {
     #pragma omp parallel num_threads(THREADS_POR_SECAO)
     {
         #pragma omp single
-        printf("Linhas %3d-%3d: thread externa %d, time interno de %d threads\n",
-               ini, fim - 1, externa, omp_get_num_threads());
+        {
+            // as 4 seções imprimem ao mesmo tempo; sem critical os pedaços do cout se misturam
+            #pragma omp critical(saida)
+            std::cout << "Linhas " << ini << "-" << fim - 1 << ": thread externa " << externa
+                      << ", time interno de " << omp_get_num_threads() << " threads\n";
+        }
 
         #pragma omp for
         for (int i = ini; i < fim; i++)
@@ -30,7 +35,10 @@ static void multiplicar_linhas(int ini, int fim) {
     }
 }
 
-int main(void) {
+int main() {
+    const std::vector<double> linha(N);
+    Matriz A(N, linha), B(N, linha), C(N, linha), Cs(N, linha);
+
     for (int i = 0; i < N; i++)
         for (int j = 0; j < N; j++) {
             A[i][j] = (i + j) % 10;
@@ -44,16 +52,16 @@ int main(void) {
         #pragma omp sections
         {
             #pragma omp section
-            multiplicar_linhas(0, N / 4);
+            multiplicar_linhas(A, B, C, 0, N / 4);
 
             #pragma omp section
-            multiplicar_linhas(N / 4, N / 2);
+            multiplicar_linhas(A, B, C, N / 4, N / 2);
 
             #pragma omp section
-            multiplicar_linhas(N / 2, 3 * N / 4);
+            multiplicar_linhas(A, B, C, N / 2, 3 * N / 4);
 
             #pragma omp section
-            multiplicar_linhas(3 * N / 4, N);
+            multiplicar_linhas(A, B, C, 3 * N / 4, N);
         }
     }
 
@@ -66,13 +74,8 @@ int main(void) {
         }
 
     // valores inteiros pequenos: a soma em double é exata, dá para comparar com ==
-    int erros = 0;
-    for (int i = 0; i < N; i++)
-        for (int j = 0; j < N; j++)
-            if (C[i][j] != Cs[i][j])
-                erros++;
-
-    printf("C[0][0] = %.0f, C[%d][%d] = %.0f\n", C[0][0], N - 1, N - 1, C[N - 1][N - 1]);
-    printf("Comparação com a versão serial: %s (%d diferenças)\n", erros ? "ERRO" : "OK", erros);
-    return erros ? 1 : 0;
+    bool ok = C == Cs;
+    std::cout << "C[0][0] = " << C[0][0] << ", C[" << N - 1 << "][" << N - 1 << "] = " << C[N - 1][N - 1] << '\n'
+              << "Comparação com a versão serial: " << (ok ? "OK" : "ERRO") << '\n';
+    return ok ? 0 : 1;
 }

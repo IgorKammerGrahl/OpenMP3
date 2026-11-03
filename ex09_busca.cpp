@@ -1,16 +1,17 @@
 // Ex 9 - Busca paralela: omp for percorre, critical atualiza a posição, single imprime
-#include <stdio.h>
+#include <algorithm>
+#include <iostream>
+#include <vector>
 #include <omp.h>
 
-#define N 1000000
+constexpr int N = 1000000;
 
-static int v[N];
-
-int main(void) {
+int main() {
+    std::vector<int> v(N);
     for (int i = 0; i < N; i++)
         v[i] = i % 1000; // o alvo aparece várias vezes, em partes de threads diferentes
 
-    int alvo = 777;
+    const int alvo = 777;
     int pos = N; // compartilhada; N significa "não encontrado"
 
     #pragma omp parallel
@@ -28,20 +29,14 @@ int main(void) {
         #pragma omp single
         {
             if (pos < N)
-                printf("Valor %d encontrado primeiro na posição %d (impresso pela thread %d)\n",
-                       alvo, pos, omp_get_thread_num());
+                std::cout << "Valor " << alvo << " encontrado primeiro na posição " << pos
+                          << " (impresso pela thread " << omp_get_thread_num() << ")\n";
             else
-                printf("Valor %d não encontrado\n", alvo);
+                std::cout << "Valor " << alvo << " não encontrado\n";
         }
     }
 
-    int serial = N;
-    for (int i = 0; i < N; i++)
-        if (v[i] == alvo) {
-            serial = i;
-            break;
-        }
-
-    printf("Busca serial: %d -> %s\n", serial, pos == serial ? "OK" : "ERRO");
+    int serial = std::find(v.begin(), v.end(), alvo) - v.begin(); // N se não achar
+    std::cout << "Busca serial: " << serial << " -> " << (pos == serial ? "OK" : "ERRO") << '\n';
     return pos == serial ? 0 : 1;
 }
